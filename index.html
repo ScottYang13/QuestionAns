@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel 資料分析與視覺化平台</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS (xlsx) CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar style */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-full text-slate-800 font-sans flex flex-col">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-md"></div>
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xl shadow-md shadow-emerald-200">
+                    <i class="fa-solid fa-file-excel"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-900 leading-tight">Excel Analytics Pro</h1>
+                    <p class="text-xs text-slate-500">試算表解析、即時分析與動態圖表生成</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 sm:gap-3">
+                <button onclick="loadSampleData()" class="px-3 py-1.5 text-xs sm:text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>載入預設範例</span>
+                </button>
+                <button onclick="exportFilteredData()" class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-download"></i>
+                    <span>匯出 XLSX</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- File Upload Area -->
+        <section class="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-6 sm:p-8 text-center hover:border-emerald-500 transition-all duration-200 bg-gradient-to-b from-slate-50/50 to-white relative shadow-sm" id="drop-zone">
+            <input type="file" id="file-input" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFileSelect(event)">
+            <label for="file-input" class="cursor-pointer flex flex-col items-center justify-center gap-3">
+                <div class="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <div>
+                    <span class="font-semibold text-slate-800 text-base">點擊選擇檔案</span> 或直接將 Excel / CSV 檔案拖曳至此處
+                    <p class="text-xs text-slate-400 mt-1">支援格式: .xlsx, .xls, .csv（最大支援數萬行快速渲染）</p>
+                </div>
+            </label>
+        </section>
+
+        <!-- Workbook Info & Sheet Tabs Container -->
+        <div id="workspace-container" class="space-y-6">
+            
+            <!-- File Info & Sheet Switcher -->
+            <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center gap-3 min-w-0">
+                    <span class="px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-md uppercase tracking-wider shrink-0" id="file-type-badge">XLSX</span>
+                    <h2 class="font-semibold text-slate-800 truncate text-base" id="file-name-display">範例_企業年度營運狀況表.xlsx</h2>
+                    <span class="text-xs text-slate-400 shrink-0" id="file-size-display"></span>
+                </div>
+
+                <!-- Sheet Tabs -->
+                <div class="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-thin" id="sheet-tabs">
+                    <!-- Tab Items Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Summary KPI Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
+                        <span>總資料行數</span>
+                        <i class="fa-solid fa-list-ol text-blue-500"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-slate-800" id="kpi-total-rows">0</div>
+                    <p class="text-[11px] text-slate-400 mt-1" id="kpi-filtered-rows">目前顯示: 0 筆</p>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
+                        <span>總欄位數</span>
+                        <i class="fa-solid fa-columns text-emerald-500"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-slate-800" id="kpi-total-cols">0</div>
+                    <p class="text-[11px] text-slate-400 mt-1" id="kpi-numeric-cols">數值型欄位: 0 個</p>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
+                        <span>空白單元格率</span>
+                        <i class="fa-solid fa-border-none text-amber-500"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-slate-800" id="kpi-null-ratio">0%</div>
+                    <p class="text-[11px] text-slate-400 mt-1" id="kpi-null-count">空值個數: 0</p>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
+                        <span>目前頁數</span>
+                        <i class="fa-solid fa-file-lines text-indigo-500"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-slate-800" id="kpi-current-page">1 / 1</div>
+                    <p class="text-[11px] text-slate-400 mt-1" id="kpi-rows-per-page">每頁 15 筆</p>
+                </div>
+            </div>
+
+            <!-- View Mode Navigation Tabs (Table, Chart, Column Insights) -->
+            <div class="border-b border-slate-200 flex gap-6 text-sm font-medium text-slate-500">
+                <button onclick="switchView('table')" id="view-btn-table" class="pb-3 border-b-2 border-emerald-600 text-emerald-600 font-semibold flex items-center gap-2">
+                    <i class="fa-solid fa-table"></i> 資料表格與篩選
+                </button>
+                <button onclick="switchView('chart')" id="view-btn-chart" class="pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column"></i> 動態圖表視覺化
+                </button>
+                <button onclick="switchView('stats')" id="view-btn-stats" class="pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-calculator"></i> 欄位統計分析
+                </button>
+            </div>
+
+            <!-- VIEW 1: Data Table View -->
+            <div id="view-section-table" class="space-y-4">
+                <!-- Search & Table Controls -->
+                <div class="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="relative w-full sm:w-80">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="global-search" oninput="onSearchChange()" placeholder="全域關鍵字搜尋..." 
+                            class="w-full pl-9 pr-8 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                        <button id="clear-search-btn" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                            <i class="fa-solid fa-circle-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+                        <label class="text-xs text-slate-500 flex items-center gap-1.5">
+                            每頁筆數:
+                            <select id="page-size-select" onchange="onPageSizeChange()" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option value="10">10 筆</option>
+                                <option value="15" selected>15 筆</option>
+                                <option value="25">25 筆</option>
+                                <option value="50">50 筆</option>
+                                <option value="100">100 筆</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Table Container -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto max-h-[550px] relative">
+                        <table class="w-full text-left text-xs sm:text-sm text-slate-700 border-collapse">
+                            <thead class="bg-slate-100 text-slate-700 uppercase font-semibold sticky top-0 z-10 shadow-sm" id="table-head">
+                                <!-- Rendered JS -->
+                            </thead>
+                            <tbody id="table-body" class="divide-y divide-slate-200 bg-white">
+                                <!-- Rendered JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination Bar -->
+                    <div class="px-4 py-3 border-t border-slate-200 flex items-center justify-between bg-slate-50 text-xs text-slate-600">
+                        <div id="pagination-info">顯示 0 到 0 筆，共 0 筆資料</div>
+                        <div class="flex items-center gap-1" id="pagination-controls">
+                            <!-- Buttons rendered by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 2: Chart Visualization View -->
+            <div id="view-section-chart" class="hidden space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    <!-- Chart Configuration Panel -->
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="font-bold text-slate-800 text-sm border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-emerald-600"></i> 圖表參數設定
+                        </h3>
+
+                        <!-- Chart Type Select -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">圖表類型</label>
+                            <select id="chart-type" onchange="updateChart()" class="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                                <option value="bar">長條圖 (Bar Chart)</option>
+                                <option value="line">折線圖 (Line Chart)</option>
+                                <option value="pie">圓餅圖 (Pie Chart)</option>
+                                <option value="doughnut">環狀圖 (Doughnut Chart)</option>
+                                <option value="polarArea">極座標圖 (Polar Area)</option>
+                            </select>
+                        </div>
+
+                        <!-- X Axis Column -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">X 軸 (維度/分類欄位)</label>
+                            <select id="chart-x-axis" onchange="updateChart()" class="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                                <!-- JS Populated -->
+                            </select>
+                        </div>
+
+                        <!-- Y Axis Column -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Y 軸 (指標/數值欄位)</label>
+                            <select id="chart-y-axis" onchange="updateChart()" class="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                                <!-- JS Populated -->
+                            </select>
+                        </div>
+
+                        <!-- Aggregation Method -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">聚合計算方式</label>
+                            <select id="chart-agg" onchange="updateChart()" class="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                                <option value="sum">加總 (Sum)</option>
+                                <option value="avg">平均 (Average)</option>
+                                <option value="count">計數 (Count)</option>
+                            </select>
+                        </div>
+
+                        <!-- Limit Top N -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">顯示項目筆數</label>
+                            <select id="chart-limit" onchange="updateChart()" class="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                                <option value="10">前 10 筆</option>
+                                <option value="20" selected>前 20 筆</option>
+                                <option value="50">前 50 筆</option>
+                                <option value="all">顯示全部</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Chart Render Area -->
+                    <div class="lg:col-span-3 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between min-h-[420px]">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-3 mb-3">
+                            <h4 class="font-semibold text-slate-800 text-sm" id="chart-title-text">資料視覺化分析圖</h4>
+                            <span class="text-xs text-slate-400">基於當前活頁簿篩選結果數據</span>
+                        </div>
+                        <div class="relative flex-1 w-full flex items-center justify-center">
+                            <canvas id="analytics-chart" class="max-h-[380px]"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 3: Column Statistics View -->
+            <div id="view-section-stats" class="hidden">
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
+                    <h3 class="font-bold text-slate-800 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-indigo-600"></i> 各欄位資料型態與統計摘要
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="column-stats-grid">
+                        <!-- Stats cards rendered by JS -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 mt-auto text-center text-xs text-slate-400">
+        <div class="max-w-7xl mx-auto px-4">
+            Excel Analytics & Visualization Platform &copy; 2026. Powered by SheetJS & Chart.js
+        </div>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Global State Store
+        let workbookData = {}; // Format: { "Sheet1": [ { col1: val1, ... }, ... ], "Sheet2": ... }
+        let currentSheetName = "";
+        let rawCurrentSheetRows = [];
+        let filteredRows = [];
+        
+        // Table Config
+        let currentPage = 1;
+        let pageSize = 15;
+        let sortColumn = null;
+        let sortDirection = 'asc'; // 'asc' or 'desc'
+        let searchQuery = '';
+
+        // Chart Instance
+        let chartInstance = null;
+
+        // Sample Data Initialization on Page Load
+        window.addEventListener('DOMContentLoaded', () => {
+            setupDragAndDrop();
+            loadSampleData();
+        });
+
+        // Generate Sample Excel Data
+        function loadSampleData() {
+            const sampleSales = [
+                { "訂單編號": "ORD-2026-001", "日期": "2026-01-05", "銷售區域": "北部區域", "產品類別": "筆記型電腦", "銷售員": "張小明", "銷售數量": 12, "單價": 28000, "銷售金額": 336000, "滿意度": 4.8 },
+                { "訂單編號": "ORD-2026-002", "日期": "2026-01-08", "銷售區域": "中部區域", "產品類別": "智慧型手機", "銷售員": "李美麗", "銷售數量": 25, "單價": 18500, "銷售金額": 462500, "滿意度": 4.5 },
+                { "訂單編號": "ORD-2026-003", "日期": "2026-01-12", "銷售區域": "南部區域", "產品類別": "平板電腦", "銷售員": "王大衛", "銷售數量": 18, "單價": 12000, "銷售金額": 216000, "滿意度": 4.2 },
+                { "訂單編號": "ORD-2026-004", "日期": "2026-01-15", "銷售區域": "北部區域", "產品類別": "無線耳機", "銷售員": "張小明", "銷售數量": 45, "單價": 3500, "銷售金額": 157500, "滿意度": 4.9 },
+                { "訂單編號": "ORD-2026-005", "日期": "2026-01-18", "銷售區域": "東部區域", "產品類別": "筆記型電腦", "銷售員": "陳志強", "銷售數量": 8, "單價": 28000, "銷售金額": 224000, "滿意度": 4.6 },
+                { "訂單編號": "ORD-2026-006", "日期": "2026-01-22", "銷售區域": "中部區域", "產品類別": "液晶螢幕", "銷售員": "李美麗", "銷售數量": 15, "單價": 7800, "銷售金額": 117000, "滿意度": 4.4 },
+                { "訂單編號": "ORD-2026-007", "日期": "2026-02-01", "銷售區域": "南部區域", "產品類別": "智慧型手機", "銷售員": "王大衛", "銷售數量": 30, "單價": 18500, "銷售金額": 555000, "滿意度": 4.7 },
+                { "訂單編號": "ORD-2026-008", "日期": "2026-02-05", "銷售區域": "北部區域", "產品類別": "機械鍵盤", "銷售員": "林雅婷", "銷售數量": 50, "單價": 2500, "銷售金額": 125000, "滿意度": 4.8 },
+                { "訂單編號": "ORD-2026-009", "日期": "2026-02-10", "銷售區域": "中部區域", "產品類別": "筆記型電腦", "銷售員": "李美麗", "銷售數量": 10, "單價": 28000, "銷售金額": 280000, "滿意度": 4.3 },
+                { "訂單編號": "ORD-2026-010", "日期": "2026-02-14", "銷售區域": "南部區域", "產品類別": "無線耳機", "銷售員": "王大衛", "銷售數量": 60, "單價": 3500, "銷售金額": 210000, "滿意度": 4.9 },
+                { "訂單編號": "ORD-2026-011", "日期": "2026-02-18", "銷售區域": "東部區域", "產品類別": "平板電腦", "銷售員": "陳志強", "銷售數量": 14, "單價": 12000, "銷售金額": 168000, "滿意度": 4.1 },
+                { "訂單編號": "ORD-2026-012", "日期": "2026-02-25", "銷售區域": "北部區域", "產品類別": "智慧型手機", "銷售員": "林雅婷", "銷售數量": 22, "單價": 18500, "銷售金額": 407000, "滿意度": 4.6 }
+            ];
+
+            const sampleTargets = [
+                { "銷售區域": "北部區域", "負責主管": "劉經理", "目標業績": 1200000, "達成業績": 1225500, "達成率": "102.1%" },
+                { "銷售區域": "中部區域", "負責主管": "黃經理", "目標業績": 900000, "達成業績": 859500, "達成率": "95.5%" },
+                { "銷售區域": "南部區域", "負責主管": "趙經理", "目標業績": 1000000, "達成業績": 981000, "達成率": "98.1%" },
+                { "銷售區域": "東部區域", "負責主管": "孫經理", "目標業績": 400000, "達成業績": 392000, "達成率": "98.0%" }
+            ];
+
+            const sampleInventory = [
+                { "品號": "SKU-101", "品名": "筆記型電腦 Pro", "類別": "硬體設備", "庫存量": 45, "安全庫存": 20, "單位成本": 22000 },
+                { "品號": "SKU-102", "品名": "智慧型手機 X", "類別": "通訊設備", "庫存量": 120, "安全庫存": 50, "單位成本": 13500 },
+                { "品號": "SKU-103", "品名": "平板電腦 Air", "類別": "硬體設備", "庫存量": 80, "安全庫存": 30, "單位成本": 8800 },
+                { "品號": "SKU-104", "品名": "無線降噪耳機", "類別": "週邊配件", "庫存量": 210, "安全庫存": 80, "單位成本": 2100 },
+                { "品號": "SKU-105", "品名": "RGB 機械鍵盤", "類別": "週邊配件", "庫存量": 150, "安全庫存": 60, "單位成本": 1400 }
+            ];
+
+            workbookData = {
+                "銷售明細表": sampleSales,
+                "區域目標達成率": sampleTargets,
+                "產品庫存清單": sampleInventory
+            };
+
+            document.getElementById('file-name-display').innerText = "預設範例_企業營運數據表.xlsx";
+            document.getElementById('file-type-badge').innerText = "DEMO";
+            document.getElementById('file-size-display').innerText = "(預設範例)";
+
+            initWorkbookView();
+            showToast("成功載入預設範例資料！", "success");
+        }
+
+        // Setup Drag and Drop events
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('drop-zone');
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.add('border-emerald-500', 'bg-emerald-50/20'), false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.remove('border-emerald-500', 'bg-emerald-50/20'), false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length > 0) {
+                    processFile(files[0]);
+                }
+            });
+        }
+
+        function handleFileSelect(event) {
+            const files = event.target.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        }
+
+        // Process Uploaded File using SheetJS
+        function processFile(file) {
+            const reader = new FileReader();
+            const ext = file.name.split('.').pop().toLowerCase();
+
+            document.getElementById('file-name-display').innerText = file.name;
+            document.getElementById('file-type-badge').innerText = ext.toUpperCase();
+            document.getElementById('file-size-display').innerText = `(${ (file.size / 1024).toFixed(1) } KB)`;
+
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    workbookData = {};
+                    workbook.SheetNames.forEach(sheetName => {
+                        const worksheet = workbook.Sheets[sheetName];
+                        // Convert sheet to JSON array
+                        const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                        if (json.length > 0) {
+                            workbookData[sheetName] = json;
+                        }
+                    });
+
+                    if (Object.keys(workbookData).length === 0) {
+                        showToast("此檔案沒有包含可讀取的資料內容", "error");
+                        return;
+                    }
+
+                    initWorkbookView();
+                    showToast(`成功解析檔案，包含 ${Object.keys(workbookData).length} 個工作表`, "success");
+
+                } catch (err) {
+                    console.error(err);
+                    showToast("檔案讀取失敗，請確認是否為有效的 Excel 或 CSV 檔案", "error");
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Initialize Workspace Views after loading data
+        function initWorkbookView() {
+            const sheetNames = Object.keys(workbookData);
+            if (sheetNames.length === 0) return;
+
+            // Render Sheet Tabs
+            const tabsContainer = document.getElementById('sheet-tabs');
+            tabsContainer.innerHTML = '';
+
+            sheetNames.forEach((sheetName, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
+                    idx === 0 
+                    ? 'bg-emerald-600 text-white shadow-sm' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`;
+                btn.innerText = sheetName;
+                btn.onclick = () => switchSheet(sheetName, btn);
+                tabsContainer.appendChild(btn);
+            });
+
+            // Set first sheet active
+            currentSheetName = sheetNames[0];
+            rawCurrentSheetRows = workbookData[currentSheetName] || [];
+            
+            // Reset filters & page
+            currentPage = 1;
+            searchQuery = '';
+            document.getElementById('global-search').value = '';
+            document.getElementById('clear-search-btn').classList.add('hidden');
+            sortColumn = null;
+
+            applyFiltersAndRender();
+            populateChartDropdowns();
+            renderColumnStats();
+        }
+
+        // Switch Active Sheet Tab
+        function switchSheet(sheetName, activeBtn) {
+            currentSheetName = sheetName;
+            rawCurrentSheetRows = workbookData[currentSheetName] || [];
+
+            // Update Tab styles
+            const tabs = document.getElementById('sheet-tabs').children;
+            for (let btn of tabs) {
+                btn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap bg-slate-100 text-slate-600 hover:bg-slate-200';
+            }
+            activeBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap bg-emerald-600 text-white shadow-sm';
+
+            currentPage = 1;
+            sortColumn = null;
+            applyFiltersAndRender();
+            populateChartDropdowns();
+            renderColumnStats();
+        }
+
+        // Filter and Sort Processing
+        function applyFiltersAndRender() {
+            if (!rawCurrentSheetRows || rawCurrentSheetRows.length === 0) {
+                filteredRows = [];
+            } else {
+                // 1. Search Filter
+                if (searchQuery.trim() !== '') {
+                    const q = searchQuery.toLowerCase();
+                    filteredRows = rawCurrentSheetRows.filter(row => {
+                        return Object.values(row).some(val => 
+                            String(val).toLowerCase().includes(q)
+                        );
+                    });
+                } else {
+                    filteredRows = [...rawCurrentSheetRows];
+                }
+
+                // 2. Sorting
+                if (sortColumn) {
+                    filteredRows.sort((a, b) => {
+                        let valA = a[sortColumn] ?? '';
+                        let valB = b[sortColumn] ?? '';
+
+                        // Number comparison
+                        if (!isNaN(valA) && !isNaN(valB) && valA !== '' && valB !== '') {
+                            valA = Number(valA);
+                            valB = Number(valB);
+                        }
+
+                        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                        return 0;
+                    });
+                }
+            }
+
+            updateKPICards();
+            renderTable();
+            updateChart();
+        }
+
+        // Search Input Event
+        function onSearchChange() {
+            searchQuery = document.getElementById('global-search').value;
+            const clearBtn = document.getElementById('clear-search-btn');
+            if (searchQuery.length > 0) {
+                clearBtn.classList.remove('hidden');
+            } else {
+                clearBtn.classList.add('hidden');
+            }
+            currentPage = 1;
+            applyFiltersAndRender();
+        }
+
+        function clearSearch() {
+            document.getElementById('global-search').value = '';
+            onSearchChange();
+        }
+
+        // Pagination handlers
+        function onPageSizeChange() {
+            pageSize = parseInt(document.getElementById('page-size-select').value);
+            currentPage = 1;
+            renderTable();
+            updateKPICards();
+        }
+
+        function goToPage(p) {
+            const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
+            if (p < 1 || p > totalPages) return;
+            currentPage = p;
+            renderTable();
+            updateKPICards();
+        }
+
+        // Sort Header Click
+        function handleSort(col) {
+            if (sortColumn === col) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = col;
+                sortDirection = 'asc';
+            }
+            applyFiltersAndRender();
+        }
+
+        // Render Table Headers and Paginated Body
+        function renderTable() {
+            const thead = document.getElementById('table-head');
+            const tbody = document.getElementById('table-body');
+
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            if (filteredRows.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="100%" class="py-12 text-center text-slate-400">
+                            <i class="fa-solid fa-inbox text-3xl mb-2 block"></i>
+                            沒有找到相符的資料筆數
+                        </td>
+                    </tr>`;
+                renderPaginationControls(0);
+                return;
+            }
+
+            // Extract Headers from first row of raw data
+            const headers = Object.keys(rawCurrentSheetRows[0] || {});
+
+            // 1. Render Table Head
+            const trHead = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.className = 'px-4 py-3 text-xs font-bold tracking-wider cursor-pointer select-none hover:bg-slate-200 transition-colors border-b border-slate-200';
+                
+                let sortIcon = '<i class="fa-solid fa-sort text-slate-300 ml-1.5"></i>';
+                if (sortColumn === header) {
+                    sortIcon = sortDirection === 'asc' 
+                        ? '<i class="fa-solid fa-sort-up text-emerald-600 ml-1.5"></i>' 
+                        : '<i class="fa-solid fa-sort-down text-emerald-600 ml-1.5"></i>';
+                }
+
+                th.innerHTML = `<div class="flex items-center justify-between">
+                    <span>${escapeHtml(header)}</span>
+                    ${sortIcon}
+                </div>`;
+                th.onclick = () => handleSort(header);
+                trHead.appendChild(th);
+            });
+            thead.appendChild(trHead);
+
+            // 2. Render Paginated Table Body
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filteredRows.length);
+            const pageData = filteredRows.slice(startIndex, endIndex);
+
+            pageData.forEach((row, rowIdx) => {
+                const tr = document.createElement('tr');
+                tr.className = rowIdx % 2 === 0 ? 'bg-white hover:bg-slate-50 transition-colors' : 'bg-slate-50/50 hover:bg-slate-100/60 transition-colors';
+
+                headers.forEach(header => {
+                    const td = document.createElement('td');
+                    td.className = 'px-4 py-2.5 whitespace-nowrap text-slate-700';
+                    const val = row[header];
+
+                    // Formatter logic
+                    if (val === null || val === undefined || val === '') {
+                        td.innerHTML = `<span class="text-slate-300 italic text-xs">空值</span>`;
+                    } else if (typeof val === 'number') {
+                        td.innerText = val.toLocaleString();
+                    } else {
+                        td.innerText = String(val);
+                    }
+
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            renderPaginationControls(filteredRows.length);
+        }
+
+        // Render Pagination Control Buttons
+        function renderPaginationControls(totalItems) {
+            const totalPages = Math.ceil(totalItems / pageSize) || 1;
+            const infoElem = document.getElementById('pagination-info');
+            const controlsElem = document.getElementById('pagination-controls');
+
+            const start = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+            const end = Math.min(currentPage * pageSize, totalItems);
+
+            infoElem.innerText = `顯示第 ${start} 至 ${end} 筆，共 ${totalItems} 筆資料`;
+
+            controlsElem.innerHTML = '';
+
+            // Prev Button
+            const prevBtn = document.createElement('button');
+            prevBtn.className = `px-2.5 py-1 rounded-md border text-xs font-medium transition-colors ${
+                currentPage === 1 
+                ? 'text-slate-300 border-slate-200 cursor-not-allowed' 
+                : 'text-slate-600 border-slate-300 hover:bg-slate-100'
+            }`;
+            prevBtn.innerHTML = `<i class="fa-solid fa-chevron-left"></i>`;
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => goToPage(currentPage - 1);
+            controlsElem.appendChild(prevBtn);
+
+            // Page Number Buttons
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+
+            for (let p = startPage; p <= endPage; p++) {
+                const btn = document.createElement('button');
+                btn.className = `px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                    p === currentPage 
+                    ? 'bg-emerald-600 text-white shadow-xs' 
+                    : 'text-slate-600 border border-slate-300 hover:bg-slate-100'
+                }`;
+                btn.innerText = p;
+                btn.onclick = () => goToPage(p);
+                controlsElem.appendChild(btn);
+            }
+
+            // Next Button
+            const nextBtn = document.createElement('button');
+            nextBtn.className = `px-2.5 py-1 rounded-md border text-xs font-medium transition-colors ${
+                currentPage === totalPages || totalPages === 0
+                ? 'text-slate-300 border-slate-200 cursor-not-allowed' 
+                : 'text-slate-600 border-slate-300 hover:bg-slate-100'
+            }`;
+            nextBtn.innerHTML = `<i class="fa-solid fa-chevron-right"></i>`;
+            nextBtn.disabled = currentPage === totalPages || totalPages === 0;
+            nextBtn.onclick = () => goToPage(currentPage + 1);
+            controlsElem.appendChild(nextBtn);
+        }
+
+        // Update Top KPI Stats
+        function updateKPICards() {
+            const totalRows = rawCurrentSheetRows.length;
+            const headers = Object.keys(rawCurrentSheetRows[0] || {});
+            
+            let totalCells = totalRows * headers.length;
+            let nullCells = 0;
+            let numericCols = 0;
+
+            headers.forEach(h => {
+                let isNum = true;
+                let hasValue = false;
+
+                rawCurrentSheetRows.forEach(row => {
+                    const val = row[h];
+                    if (val === null || val === undefined || val === '') {
+                        nullCells++;
+                    } else {
+                        hasValue = true;
+                        if (isNaN(val)) isNum = false;
+                    }
+                });
+
+                if (isNum && hasValue) numericCols++;
+            });
+
+            const nullRatio = totalCells > 0 ? ((nullCells / totalCells) * 100).toFixed(1) : 0;
+            const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
+
+            document.getElementById('kpi-total-rows').innerText = totalRows.toLocaleString();
+            document.getElementById('kpi-filtered-rows').innerText = `篩選過濾後: ${filteredRows.length.toLocaleString()} 筆`;
+
+            document.getElementById('kpi-total-cols').innerText = headers.length;
+            document.getElementById('kpi-numeric-cols').innerText = `數值型態欄位: ${numericCols} 個`;
+
+            document.getElementById('kpi-null-ratio').innerText = `${nullRatio}%`;
+            document.getElementById('kpi-null-count').innerText = `缺失值單元格: ${nullCells.toLocaleString()} 個`;
+
+            document.getElementById('kpi-current-page').innerText = `${currentPage} / ${totalPages}`;
+            document.getElementById('kpi-rows-per-page').innerText = `每頁顯示 ${pageSize} 筆`;
+        }
+
+        // Populate Chart Dropdowns (X-axis, Y-axis)
+        function populateChartDropdowns() {
+            const xAxisSelect = document.getElementById('chart-x-axis');
+            const yAxisSelect = document.getElementById('chart-y-axis');
+
+            xAxisSelect.innerHTML = '';
+            yAxisSelect.innerHTML = '';
+
+            if (!rawCurrentSheetRows || rawCurrentSheetRows.length === 0) return;
+
+            const headers = Object.keys(rawCurrentSheetRows[0]);
+
+            headers.forEach((h, idx) => {
+                const optX = document.createElement('option');
+                optX.value = h;
+                optX.innerText = h;
+                xAxisSelect.appendChild(optX);
+
+                const optY = document.createElement('option');
+                optY.value = h;
+                optY.innerText = h;
+                yAxisSelect.appendChild(optY);
+            });
+
+            // Smart Auto-select for Chart: Select first non-numeric for X, first numeric for Y
+            if (headers.length > 1) {
+                let numCol = headers.find(h => typeof rawCurrentSheetRows[0][h] === 'number') || headers[1];
+                let catCol = headers.find(h => typeof rawCurrentSheetRows[0][h] !== 'number') || headers[0];
+
+                xAxisSelect.value = catCol;
+                yAxisSelect.value = numCol;
+            }
+        }
+
+        // Render Chart using Chart.js
+        function updateChart() {
+            const xAxisCol = document.getElementById('chart-x-axis').value;
+            const yAxisCol = document.getElementById('chart-y-axis').value;
+            const chartType = document.getElementById('chart-type').value;
+            const aggMethod = document.getElementById('chart-agg').value;
+            const limitVal = document.getElementById('chart-limit').value;
+
+            if (!xAxisCol || !yAxisCol || filteredRows.length === 0) {
+                if (chartInstance) chartInstance.destroy();
+                return;
+            }
+
+            // Aggregate Data
+            const grouped = {};
+            filteredRows.forEach(row => {
+                const xVal = String(row[xAxisCol] ?? 'Unspecified');
+                const rawY = row[yAxisCol];
+                const yVal = parseFloat(rawY) || 0;
+
+                if (!grouped[xVal]) {
+                    grouped[xVal] = { sum: 0, count: 0, values: [] };
+                }
+
+                grouped[xVal].sum += yVal;
+                grouped[xVal].count += 1;
+                grouped[xVal].values.push(yVal);
+            });
+
+            let labels = Object.keys(grouped);
+            let dataPoints = labels.map(label => {
+                const g = grouped[label];
+                if (aggMethod === 'sum') return g.sum;
+                if (aggMethod === 'avg') return g.count > 0 ? (g.sum / g.count) : 0;
+                if (aggMethod === 'count') return g.count;
+                return g.sum;
+            });
+
+            // Limit top N
+            if (limitVal !== 'all') {
+                const limit = parseInt(limitVal);
+                labels = labels.slice(0, limit);
+                dataPoints = dataPoints.slice(0, limit);
+            }
+
+            document.getElementById('chart-title-text').innerText = `${xAxisCol} vs ${yAxisCol} (${aggMethod.toUpperCase()})`;
+
+            // Chart Colors
+            const bgColors = [
+                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
+                '#ec4899', '#06b6d4', '#84cc16', '#6366f1', '#14b8a6'
+            ];
+
+            const ctx = document.getElementById('analytics-chart').getContext('2d');
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${yAxisCol} (${aggMethod})`,
+                        data: dataPoints,
+                        backgroundColor: chartType === 'line' ? 'rgba(59, 130, 246, 0.15)' : bgColors,
+                        borderColor: chartType === 'line' ? '#2563eb' : '#ffffff',
+                        borderWidth: 2,
+                        fill: chartType === 'line',
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: ['pie', 'doughnut', 'polarArea'].includes(chartType),
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let val = context.raw;
+                                    return ` ${context.dataset.label}: ${val.toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: ['pie', 'doughnut', 'polarArea'].includes(chartType) ? {} : {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#f1f5f9' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Render Detailed Column Statistics
+        function renderColumnStats() {
+            const container = document.getElementById('column-stats-grid');
+            container.innerHTML = '';
+
+            if (!rawCurrentSheetRows || rawCurrentSheetRows.length === 0) return;
+
+            const headers = Object.keys(rawCurrentSheetRows[0]);
+
+            headers.forEach(col => {
+                const values = rawCurrentSheetRows.map(r => r[col]);
+                const total = values.length;
+                
+                let nonNullValues = values.filter(v => v !== null && v !== undefined && v !== '');
+                let nullCount = total - nonNullValues.length;
+
+                // Determine DataType & Numeric Calculations
+                let isNumeric = nonNullValues.length > 0 && nonNullValues.every(v => !isNaN(v));
+                let numSum = 0, numAvg = 0, numMin = null, numMax = null;
+
+                if (isNumeric && nonNullValues.length > 0) {
+                    const numArr = nonNullValues.map(Number);
+                    numSum = numArr.reduce((a, b) => a + b, 0);
+                    numAvg = numSum / numArr.length;
+                    numMin = Math.min(...numArr);
+                    numMax = Math.max(...numArr);
+                }
+
+                // Unique values
+                const uniqueCount = new Set(nonNullValues).size;
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2";
+                
+                card.innerHTML = `
+                    <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <span class="font-bold text-slate-800 text-sm truncate">${escapeHtml(col)}</span>
+                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full ${isNumeric ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">
+                            ${isNumeric ? '數值型 (Numeric)' : '字串型 (Text)'}
+                        </span>
+                    </div>
+                    <div class="text-xs space-y-1 text-slate-600">
+                        <div class="flex justify-between"><span>相異值個數:</span> <span class="font-semibold text-slate-800">${uniqueCount}</span></div>
+                        <div class="flex justify-between"><span>空白缺值:</span> <span class="font-semibold text-slate-800">${nullCount} (${((nullCount/total)*100).toFixed(1)}%)</span></div>
+                        ${isNumeric ? `
+                            <div class="flex justify-between"><span>總和 (Sum):</span> <span class="font-semibold text-slate-800">${numSum.toLocaleString()}</span></div>
+                            <div class="flex justify-between"><span>平均值 (Avg):</span> <span class="font-semibold text-slate-800">${numAvg.toFixed(2)}</span></div>
+                            <div class="flex justify-between"><span>極值範圍:</span> <span class="font-semibold text-slate-800">${numMin} ~ ${numMax}</span></div>
+                        ` : ''}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        // View Switcher (Table / Chart / Stats)
+        function switchView(viewName) {
+            ['table', 'chart', 'stats'].forEach(v => {
+                document.getElementById(`view-section-${v}`).classList.add('hidden');
+                document.getElementById(`view-btn-${v}`).className = 'pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2 text-slate-500';
+            });
+
+            document.getElementById(`view-section-${viewName}`).classList.remove('hidden');
+            document.getElementById(`view-btn-${viewName}`).className = 'pb-3 border-b-2 border-emerald-600 text-emerald-600 font-semibold flex items-center gap-2';
+
+            if (viewName === 'chart') {
+                updateChart();
+            }
+        }
+
+        // Export Filtered Data back to XLSX
+        function exportFilteredData() {
+            if (!filteredRows || filteredRows.length === 0) {
+                showToast("當前無可供匯出的資料", "error");
+                return;
+            }
+
+            const ws = XLSX.utils.json_to_sheet(filteredRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, currentSheetName || "FilteredData");
+
+            const fileName = `Export_${currentSheetName}_${new Date().toISOString().slice(0,10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            showToast(`已成功導出 ${fileName}`, "success");
+        }
+
+        // Toast Notification Helper
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgClass = type === 'success' ? 'bg-emerald-700' : type === 'error' ? 'bg-rose-700' : 'bg-slate-800';
+            const icon = type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info';
+
+            toast.className = `${bgClass} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 text-xs sm:text-sm animate-bounce transition-all duration-300`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} text-base"></i>
+                <span class="flex-1">${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Helper function to escape HTML string
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
