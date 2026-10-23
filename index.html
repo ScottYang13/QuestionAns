@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excel 資料分析與視覺化平台</title>
+    <title>Google 試算表即時同步與資料分析平台</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons CDN -->
@@ -30,7 +30,6 @@
         }
     </script>
     <style>
-        /* Custom scrollbar style */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -45,6 +44,14 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
     </style>
 </head>
 <body class="h-full text-slate-800 font-sans flex flex-col">
@@ -57,22 +64,28 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xl shadow-md shadow-emerald-200">
-                    <i class="fa-solid fa-file-excel"></i>
+                    <i class="fa-solid fa-sync"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-lg text-slate-900 leading-tight">Excel Analytics Pro</h1>
-                    <p class="text-xs text-slate-500">試算表解析、即時分析與動態圖表生成</p>
+                    <h1 class="font-bold text-base sm:text-lg text-slate-900 leading-tight flex items-center gap-2">
+                        <span>SheetSync Analytics Pro</span>
+                        <span id="sync-status-badge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 pulse-dot"></span>
+                            <span id="sync-status-text">已連線</span>
+                        </span>
+                    </h1>
+                    <p class="text-xs text-slate-500 hidden sm:block">Google 試算表自動同步、動態看板與進階圖表分析</p>
                 </div>
             </div>
             
             <div class="flex items-center gap-2 sm:gap-3">
-                <button onclick="loadSampleData()" class="px-3 py-1.5 text-xs sm:text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1.5">
-                    <i class="fa-solid fa-rotate-left"></i>
-                    <span>載入預設範例</span>
+                <button onclick="manualRefreshData()" id="btn-manual-refresh" class="px-3 py-1.5 text-xs sm:text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-rotate text-xs" id="refresh-icon"></i>
+                    <span>立即更新</span>
                 </button>
                 <button onclick="exportFilteredData()" class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1.5 shadow-sm">
                     <i class="fa-solid fa-download"></i>
-                    <span>匯出 XLSX</span>
+                    <span class="hidden sm:inline">匯出 XLSX</span>
                 </button>
             </div>
         </div>
@@ -81,34 +94,100 @@
     <!-- Main Content -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-        <!-- File Upload Area -->
-        <section class="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-6 sm:p-8 text-center hover:border-emerald-500 transition-all duration-200 bg-gradient-to-b from-slate-50/50 to-white relative shadow-sm" id="drop-zone">
-            <input type="file" id="file-input" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFileSelect(event)">
-            <label for="file-input" class="cursor-pointer flex flex-col items-center justify-center gap-3">
-                <div class="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                    <i class="fa-solid fa-cloud-arrow-up"></i>
+        <!-- Google Sheets Integration Bar -->
+        <section class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-base font-bold">
+                        <i class="fa-solid fa-table"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-slate-800 text-sm sm:text-base">Google 試算表資料來源設定</h2>
+                        <p class="text-xs text-slate-500">輸入公開的 Google 試算表網址或 ID，即刻開始自動同步</p>
+                    </div>
                 </div>
-                <div>
-                    <span class="font-semibold text-slate-800 text-base">點擊選擇檔案</span> 或直接將 Excel / CSV 檔案拖曳至此處
-                    <p class="text-xs text-slate-400 mt-1">支援格式: .xlsx, .xls, .csv（最大支援數萬行快速渲染）</p>
+
+                <!-- Auto Refresh Controls & Countdown -->
+                <div class="flex flex-wrap items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <div class="flex items-center gap-2 text-xs font-medium text-slate-600">
+                        <i class="fa-regular fa-clock text-emerald-600"></i>
+                        <span>自動刷新頻率:</span>
+                        <select id="auto-refresh-select" onchange="onAutoRefreshChange()" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="0">停用自動更新</option>
+                            <option value="60000">每 1 分鐘</option>
+                            <option value="300000" selected>每 5 分鐘 (預設)</option>
+                            <option value="900000">每 15 分鐘</option>
+                        </select>
+                    </div>
+                    <div class="h-4 w-[1px] bg-slate-300 hidden sm:block"></div>
+                    <div class="text-xs font-semibold text-emerald-700 flex items-center gap-1.5" id="countdown-text">
+                        倒數 05:00 自動刷新
+                    </div>
                 </div>
-            </label>
+            </div>
+
+            <!-- URL Input & Buttons -->
+            <div class="flex flex-col sm:flex-row gap-2">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-link absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" id="gsheet-input-url" placeholder="請貼上 Google 試算表網址 (例如 https://docs.google.com/spreadsheets/d/...) 或試算表 ID" 
+                        class="w-full pl-9 pr-4 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="saveAndLoadGoogleSheet()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap">
+                        <i class="fa-solid fa-cloud-arrow-down"></i>
+                        <span>儲存並載入</span>
+                    </button>
+                    <button onclick="loadSamplePresetSheet()" class="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs sm:text-sm rounded-xl transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap border border-slate-200">
+                        <i class="fa-solid fa-flask"></i>
+                        <span>載入示範資料</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Helpful Notice -->
+            <div class="text-[11px] text-slate-500 flex items-start gap-1.5 bg-emerald-50/60 border border-emerald-100 p-2.5 rounded-xl">
+                <i class="fa-solid fa-circle-info text-emerald-600 text-xs mt-0.5"></i>
+                <span><strong>設定說明：</strong> 請確保您的 Google 試算表已開啟權限（在試算表中點選右上角「共用」&rarr; 將一般存取權設為「知道連結的人皆可查看」）。網頁將自動分析頁籤並持續讀取最新改動。</span>
+            </div>
         </section>
 
-        <!-- Workbook Info & Sheet Tabs Container -->
+        <!-- Backup Local Upload Toggle Area -->
+        <details class="bg-white rounded-xl border border-slate-200 shadow-sm transition-all group">
+            <summary class="px-5 py-3 text-xs font-semibold text-slate-600 cursor-pointer flex items-center justify-between select-none group-open:border-b group-open:border-slate-100">
+                <span class="flex items-center gap-2">
+                    <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                    <span>本地檔案備援上傳 (支援直接拖曳 .xlsx / .csv)</span>
+                </span>
+                <i class="fa-solid fa-chevron-down text-slate-400 group-open:rotate-180 transition-transform"></i>
+            </summary>
+            <div class="p-5">
+                <section class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-emerald-500 transition-all bg-slate-50/50" id="drop-zone">
+                    <input type="file" id="file-input" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFileSelect(event)">
+                    <label for="file-input" class="cursor-pointer flex flex-col items-center justify-center gap-2">
+                        <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-upload"></i>
+                        </div>
+                        <div class="text-xs text-slate-600">
+                            <span class="font-bold text-emerald-700">點擊選擇本地檔案</span> 或拖曳 Excel / CSV 至此處
+                        </div>
+                    </label>
+                </section>
+            </div>
+        </details>
+
+        <!-- Workspace Container -->
         <div id="workspace-container" class="space-y-6">
             
-            <!-- File Info & Sheet Switcher -->
-            <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <!-- File Info Header -->
+            <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div class="flex items-center gap-3 min-w-0">
-                    <span class="px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 rounded-md uppercase tracking-wider shrink-0" id="file-type-badge">XLSX</span>
-                    <h2 class="font-semibold text-slate-800 truncate text-base" id="file-name-display">範例_企業年度營運狀況表.xlsx</h2>
-                    <span class="text-xs text-slate-400 shrink-0" id="file-size-display"></span>
+                    <span class="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md uppercase shrink-0" id="file-type-badge">GSHEET</span>
+                    <h2 class="font-bold text-slate-800 truncate text-sm sm:text-base" id="file-name-display">正在連接 Google 試算表...</h2>
                 </div>
 
-                <!-- Sheet Tabs -->
-                <div class="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-thin" id="sheet-tabs">
-                    <!-- Tab Items Rendered by JS -->
+                <div class="flex items-center gap-2 text-xs text-slate-500 shrink-0" id="last-update-display">
+                    <i class="fa-regular fa-clock"></i> 上次更新: --:--:--
                 </div>
             </div>
 
@@ -116,7 +195,7 @@
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                     <div class="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
-                        <span>總資料行數</span>
+                        <span>總資料筆數</span>
                         <i class="fa-solid fa-list-ol text-blue-500"></i>
                     </div>
                     <div class="text-2xl font-bold text-slate-800" id="kpi-total-rows">0</div>
@@ -128,19 +207,19 @@
                         <i class="fa-solid fa-columns text-emerald-500"></i>
                     </div>
                     <div class="text-2xl font-bold text-slate-800" id="kpi-total-cols">0</div>
-                    <p class="text-[11px] text-slate-400 mt-1" id="kpi-numeric-cols">數值型欄位: 0 個</p>
+                    <p class="text-[11px] text-slate-400 mt-1" id="kpi-numeric-cols">數值欄位: 0 個</p>
                 </div>
                 <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                     <div class="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
-                        <span>空白單元格率</span>
+                        <span>空白缺失值比率</span>
                         <i class="fa-solid fa-border-none text-amber-500"></i>
                     </div>
                     <div class="text-2xl font-bold text-slate-800" id="kpi-null-ratio">0%</div>
-                    <p class="text-[11px] text-slate-400 mt-1" id="kpi-null-count">空值個數: 0</p>
+                    <p class="text-[11px] text-slate-400 mt-1" id="kpi-null-count">空值數量: 0</p>
                 </div>
                 <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                     <div class="flex items-center justify-between text-slate-500 text-xs font-medium mb-1">
-                        <span>目前頁數</span>
+                        <span>當前分頁</span>
                         <i class="fa-solid fa-file-lines text-indigo-500"></i>
                     </div>
                     <div class="text-2xl font-bold text-slate-800" id="kpi-current-page">1 / 1</div>
@@ -148,27 +227,27 @@
                 </div>
             </div>
 
-            <!-- View Mode Navigation Tabs (Table, Chart, Column Insights) -->
-            <div class="border-b border-slate-200 flex gap-6 text-sm font-medium text-slate-500">
-                <button onclick="switchView('table')" id="view-btn-table" class="pb-3 border-b-2 border-emerald-600 text-emerald-600 font-semibold flex items-center gap-2">
-                    <i class="fa-solid fa-table"></i> 資料表格與篩選
+            <!-- View Mode Navigation Tabs -->
+            <div class="border-b border-slate-200 flex gap-6 text-sm font-medium text-slate-500 overflow-x-auto">
+                <button onclick="switchView('table')" id="view-btn-table" class="pb-3 border-b-2 border-emerald-600 text-emerald-600 font-semibold flex items-center gap-2 whitespace-nowrap">
+                    <i class="fa-solid fa-table"></i> 資料表格與搜尋
                 </button>
-                <button onclick="switchView('chart')" id="view-btn-chart" class="pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2">
-                    <i class="fa-solid fa-chart-column"></i> 動態圖表視覺化
+                <button onclick="switchView('chart')" id="view-btn-chart" class="pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2 whitespace-nowrap">
+                    <i class="fa-solid fa-chart-column"></i> 動態視覺化圖表
                 </button>
-                <button onclick="switchView('stats')" id="view-btn-stats" class="pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2">
+                <button onclick="switchView('stats')" id="view-btn-stats" class="pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2 whitespace-nowrap">
                     <i class="fa-solid fa-calculator"></i> 欄位統計分析
                 </button>
             </div>
 
             <!-- VIEW 1: Data Table View -->
             <div id="view-section-table" class="space-y-4">
-                <!-- Search & Table Controls -->
+                <!-- Search & Page Size Controls -->
                 <div class="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                     <div class="relative w-full sm:w-80">
                         <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
                         <input type="text" id="global-search" oninput="onSearchChange()" placeholder="全域關鍵字搜尋..." 
-                            class="w-full pl-9 pr-8 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                            class="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
                         <button id="clear-search-btn" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                             <i class="fa-solid fa-circle-xmark"></i>
                         </button>
@@ -176,7 +255,7 @@
 
                     <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
                         <label class="text-xs text-slate-500 flex items-center gap-1.5">
-                            每頁筆數:
+                            每頁顯示:
                             <select id="page-size-select" onchange="onPageSizeChange()" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                 <option value="10">10 筆</option>
                                 <option value="15" selected>15 筆</option>
@@ -228,7 +307,6 @@
                                 <option value="line">折線圖 (Line Chart)</option>
                                 <option value="pie">圓餅圖 (Pie Chart)</option>
                                 <option value="doughnut">環狀圖 (Doughnut Chart)</option>
-                                <option value="polarArea">極座標圖 (Polar Area)</option>
                             </select>
                         </div>
 
@@ -273,8 +351,8 @@
                     <!-- Chart Render Area -->
                     <div class="lg:col-span-3 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between min-h-[420px]">
                         <div class="flex justify-between items-center border-b border-slate-100 pb-3 mb-3">
-                            <h4 class="font-semibold text-slate-800 text-sm" id="chart-title-text">資料視覺化分析圖</h4>
-                            <span class="text-xs text-slate-400">基於當前活頁簿篩選結果數據</span>
+                            <h4 class="font-semibold text-slate-800 text-sm" id="chart-title-text">資料視覺化圖表</h4>
+                            <span class="text-xs text-slate-400">依據當前篩選數據即時算繪</span>
                         </div>
                         <div class="relative flex-1 w-full flex items-center justify-center">
                             <canvas id="analytics-chart" class="max-h-[380px]"></canvas>
@@ -301,209 +379,238 @@
     <!-- Footer -->
     <footer class="bg-white border-t border-slate-200 py-4 mt-auto text-center text-xs text-slate-400">
         <div class="max-w-7xl mx-auto px-4">
-            Excel Analytics & Visualization Platform &copy; 2026. Powered by SheetJS & Chart.js
+            Google Sheets Auto-Sync Dashboard &copy; 2026. Powered by SheetJS & Chart.js
         </div>
     </footer>
 
     <!-- JavaScript Application Logic -->
     <script>
+        // Preset Public Sample Google Sheet URL
+        <!-- const SAMPLE_GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit?gid=0#gid=0"; -->
+        const SAMPLE_GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1aj7DTrOGbMxRpDTPsoyeHrQagLf-L1bdTLhbF_Bpgds/edit?usp=drive_link";
+
         // Global State Store
-        let workbookData = {}; // Format: { "Sheet1": [ { col1: val1, ... }, ... ], "Sheet2": ... }
-        let currentSheetName = "";
         let rawCurrentSheetRows = [];
         let filteredRows = [];
-        
+        let currentSheetName = "Google 試算表同步";
+        let lastUpdatedTime = null;
+
+        // Auto Refresh Timer State
+        let timerInterval = null;
+        let countdownInterval = null;
+        let refreshIntervalMs = 3600000; // Default 60 mins
+        let nextRefreshTimestamp = 0;
+
         // Table Config
         let currentPage = 1;
         let pageSize = 15;
         let sortColumn = null;
-        let sortDirection = 'asc'; // 'asc' or 'desc'
+        let sortDirection = 'asc';
         let searchQuery = '';
 
         // Chart Instance
         let chartInstance = null;
 
-        // Sample Data Initialization on Page Load
+        // On Page Load Initialization
         window.addEventListener('DOMContentLoaded', () => {
             setupDragAndDrop();
-            loadSampleData();
+            
+            // Restore saved settings or load sample preset
+            const savedUrl = localStorage.getItem('gsheet_url_setting') || SAMPLE_GOOGLE_SHEET_URL;
+            const savedInterval = localStorage.getItem('gsheet_refresh_interval') || "300000";
+
+            document.getElementById('gsheet-input-url').value = savedUrl;
+            document.getElementById('auto-refresh-select').value = savedInterval;
+            
+            refreshIntervalMs = parseInt(savedInterval);
+
+            // Initial load
+            fetchAndParseSheet(savedUrl, false);
+            setupAutoRefresh(refreshIntervalMs);
         });
 
-        // Generate Sample Excel Data
-        function loadSampleData() {
-            const sampleSales = [
-                { "訂單編號": "ORD-2026-001", "日期": "2026-01-05", "銷售區域": "北部區域", "產品類別": "筆記型電腦", "銷售員": "張小明", "銷售數量": 12, "單價": 28000, "銷售金額": 336000, "滿意度": 4.8 },
-                { "訂單編號": "ORD-2026-002", "日期": "2026-01-08", "銷售區域": "中部區域", "產品類別": "智慧型手機", "銷售員": "李美麗", "銷售數量": 25, "單價": 18500, "銷售金額": 462500, "滿意度": 4.5 },
-                { "訂單編號": "ORD-2026-003", "日期": "2026-01-12", "銷售區域": "南部區域", "產品類別": "平板電腦", "銷售員": "王大衛", "銷售數量": 18, "單價": 12000, "銷售金額": 216000, "滿意度": 4.2 },
-                { "訂單編號": "ORD-2026-004", "日期": "2026-01-15", "銷售區域": "北部區域", "產品類別": "無線耳機", "銷售員": "張小明", "銷售數量": 45, "單價": 3500, "銷售金額": 157500, "滿意度": 4.9 },
-                { "訂單編號": "ORD-2026-005", "日期": "2026-01-18", "銷售區域": "東部區域", "產品類別": "筆記型電腦", "銷售員": "陳志強", "銷售數量": 8, "單價": 28000, "銷售金額": 224000, "滿意度": 4.6 },
-                { "訂單編號": "ORD-2026-006", "日期": "2026-01-22", "銷售區域": "中部區域", "產品類別": "液晶螢幕", "銷售員": "李美麗", "銷售數量": 15, "單價": 7800, "銷售金額": 117000, "滿意度": 4.4 },
-                { "訂單編號": "ORD-2026-007", "日期": "2026-02-01", "銷售區域": "南部區域", "產品類別": "智慧型手機", "銷售員": "王大衛", "銷售數量": 30, "單價": 18500, "銷售金額": 555000, "滿意度": 4.7 },
-                { "訂單編號": "ORD-2026-008", "日期": "2026-02-05", "銷售區域": "北部區域", "產品類別": "機械鍵盤", "銷售員": "林雅婷", "銷售數量": 50, "單價": 2500, "銷售金額": 125000, "滿意度": 4.8 },
-                { "訂單編號": "ORD-2026-009", "日期": "2026-02-10", "銷售區域": "中部區域", "產品類別": "筆記型電腦", "銷售員": "李美麗", "銷售數量": 10, "單價": 28000, "銷售金額": 280000, "滿意度": 4.3 },
-                { "訂單編號": "ORD-2026-010", "日期": "2026-02-14", "銷售區域": "南部區域", "產品類別": "無線耳機", "銷售員": "王大衛", "銷售數量": 60, "單價": 3500, "銷售金額": 210000, "滿意度": 4.9 },
-                { "訂單編號": "ORD-2026-011", "日期": "2026-02-18", "銷售區域": "東部區域", "產品類別": "平板電腦", "銷售員": "陳志強", "銷售數量": 14, "單價": 12000, "銷售金額": 168000, "滿意度": 4.1 },
-                { "訂單編號": "ORD-2026-012", "日期": "2026-02-25", "銷售區域": "北部區域", "產品類別": "智慧型手機", "銷售員": "林雅婷", "銷售數量": 22, "單價": 18500, "銷售金額": 407000, "滿意度": 4.6 }
+        // Parse Google Sheet URL or ID into downloadable CSV export endpoint
+        function parseGoogleSheetCsvUrl(input) {
+            if (!input) return null;
+            input = input.trim();
+
+            // Extract Sheet ID
+            let idMatch = input.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            let id = idMatch ? idMatch[1] : (input.length > 20 && !input.includes('/') ? input : null);
+
+            // Extract GID (tab identifier)
+            let gidMatch = input.match(/[?&]gid=([0-9]+)/) || input.match(/#gid=([0-9]+)/);
+            let gid = gidMatch ? gidMatch[1] : '0';
+
+            if (!id) return null;
+
+            return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
+        }
+
+        // Fetch Google Sheet CSV data
+        async function fetchAndParseSheet(urlInput, isManual = false) {
+            const csvUrl = parseGoogleSheetCsvUrl(urlInput);
+
+            if (!csvUrl) {
+                showToast("無效的 Google 試算表網址或 ID", "error");
+                updateSyncStatusBadge('error', '網址錯誤');
+                return;
+            }
+
+            setLoadingState(true);
+
+            try {
+                // Add timestamp cache-buster
+                const cacheBustUrl = `${csvUrl}&t=${Date.now()}`;
+                const response = await fetch(cacheBustUrl, { cache: 'no-store' });
+
+                if (!response.ok) {
+                    throw new Error("無法連線至該試算表，請確認已設定權限為「知道連結的人皆可查看」");
+                }
+
+                const csvText = await response.text();
+                const workbook = XLSX.read(csvText, { type: 'string' });
+                const firstSheetName = workbook.SheetNames[0];
+                const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { defval: "" });
+
+                if (!sheetData || sheetData.length === 0) {
+                    throw new Error("試算表中未發現可讀取的數據資料列");
+                }
+
+                rawCurrentSheetRows = sheetData;
+                currentSheetName = "Google 試算表同步";
+                lastUpdatedTime = new Date();
+
+                // Save setting
+                localStorage.setItem('gsheet_url_setting', urlInput);
+
+                // UI Displays
+                document.getElementById('file-name-display').innerText = "Google 試算表 (雲端同步中)";
+                document.getElementById('file-type-badge').innerText = "GSHEET";
+                document.getElementById('last-update-display').innerText = `上次更新: ${lastUpdatedTime.toLocaleTimeString()}`;
+
+                updateSyncStatusBadge('success', '已連線同步');
+                
+                currentPage = 1;
+                applyFiltersAndRender();
+                populateChartDropdowns();
+                renderColumnStats();
+                resetCountdown();
+
+                showToast(isManual ? "資料手動刷新成功！" : "已自動同步最新試算表資料", "success");
+
+            } catch (err) {
+                console.error(err);
+                updateSyncStatusBadge('error', '同步失敗');
+                showToast(`同步失敗: ${err.message}`, "error");
+
+                // Fallback demo data if fetch fails
+                if (rawCurrentSheetRows.length === 0) {
+                    loadFallbackDemoData();
+                }
+            } finally {
+                setLoadingState(false);
+            }
+        }
+
+        // User Click "儲存並載入"
+        function saveAndLoadGoogleSheet() {
+            const urlInput = document.getElementById('gsheet-input-url').value;
+            fetchAndParseSheet(urlInput, true);
+        }
+
+        // User Click "載入示範資料"
+        function loadSamplePresetSheet() {
+            document.getElementById('gsheet-input-url').value = SAMPLE_GOOGLE_SHEET_URL;
+            fetchAndParseSheet(SAMPLE_GOOGLE_SHEET_URL, true);
+        }
+
+        // Manual Refresh Button Click
+        function manualRefreshData() {
+            const savedUrl = document.getElementById('gsheet-input-url').value;
+            fetchAndParseSheet(savedUrl, true);
+        }
+
+        // Auto Refresh Settings Change
+        function onAutoRefreshChange() {
+            const selectVal = document.getElementById('auto-refresh-select').value;
+            refreshIntervalMs = parseInt(selectVal);
+            localStorage.setItem('gsheet_refresh_interval', selectVal);
+            setupAutoRefresh(refreshIntervalMs);
+            showToast(`已更改自動更新頻率`, "info");
+        }
+
+        // Setup Interval and Countdown Timer
+        function setupAutoRefresh(ms) {
+            if (timerInterval) clearInterval(timerInterval);
+            if (countdownInterval) clearInterval(countdownInterval);
+
+            if (ms <= 0) {
+                document.getElementById('countdown-text').innerText = "自動更新已停用";
+                return;
+            }
+
+            nextRefreshTimestamp = Date.now() + ms;
+
+            // Interval execution
+            timerInterval = setInterval(() => {
+                const savedUrl = document.getElementById('gsheet-input-url').value;
+                if (savedUrl) {
+                    fetchAndParseSheet(savedUrl, false);
+                }
+            }, ms);
+
+            // 1-second countdown UI updates
+            countdownInterval = setInterval(() => {
+                const remainingSec = Math.max(0, Math.ceil((nextRefreshTimestamp - Date.now()) / 1000));
+                const min = Math.floor(remainingSec / 60);
+                const sec = remainingSec % 60;
+                document.getElementById('countdown-text').innerText = `倒數 ${min < 10 ? '0' : ''}${min}:${sec < 10 ? '0' : ''}${sec} 自動刷新`;
+            }, 1000);
+        }
+
+        function resetCountdown() {
+            if (refreshIntervalMs > 0) {
+                nextRefreshTimestamp = Date.now() + refreshIntervalMs;
+            }
+        }
+
+        // Update Header Badge
+        function updateSyncStatusBadge(state, msg) {
+            const badge = document.getElementById('sync-status-badge');
+            const text = document.getElementById('sync-status-text');
+
+            if (state === 'success') {
+                badge.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800 border border-emerald-200";
+                badge.querySelector('.pulse-dot').className = "w-2 h-2 rounded-full bg-emerald-500 pulse-dot";
+                text.innerText = msg || "已連線";
+            } else {
+                badge.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-100 text-rose-800 border border-rose-200";
+                badge.querySelector('.pulse-dot').className = "w-2 h-2 rounded-full bg-rose-500";
+                text.innerText = msg || "同步異常";
+            }
+        }
+
+        // Loading animation toggle
+        function setLoadingState(isLoading) {
+            const icon = document.getElementById('refresh-icon');
+            if (isLoading) {
+                icon.classList.add('fa-spin');
+            } else {
+                icon.classList.remove('fa-spin');
+            }
+        }
+
+        // Fallback demo data generator
+        function loadFallbackDemoData() {
+            rawCurrentSheetRows = [
+                { "銷售單號": "SO-2026-001", "日期": "2026-01-05", "區域": "北部區域", "產品名稱": "雲端伺服器方案 A", "銷售數量": 10, "單價": 15000, "總金額": 150000 },
+                { "銷售單號": "SO-2026-002", "日期": "2026-01-10", "區域": "中部區域", "產品名稱": "企業版軟體授權", "銷售數量": 25, "單價": 8000, "總金額": 200000 },
+                { "銷售單號": "SO-2026-003", "日期": "2026-01-15", "區域": "南部區域", "產品名稱": "雲端伺服器方案 A", "銷售數量": 18, "單價": 15000, "總金額": 270000 },
+                { "銷售單號": "SO-2026-004", "日期": "2026-01-20", "區域": "北部區域", "產品名稱": "資料庫備份服務", "銷售數量": 40, "單價": 3500, "總金額": 140000 }
             ];
-
-            const sampleTargets = [
-                { "銷售區域": "北部區域", "負責主管": "劉經理", "目標業績": 1200000, "達成業績": 1225500, "達成率": "102.1%" },
-                { "銷售區域": "中部區域", "負責主管": "黃經理", "目標業績": 900000, "達成業績": 859500, "達成率": "95.5%" },
-                { "銷售區域": "南部區域", "負責主管": "趙經理", "目標業績": 1000000, "達成業績": 981000, "達成率": "98.1%" },
-                { "銷售區域": "東部區域", "負責主管": "孫經理", "目標業績": 400000, "達成業績": 392000, "達成率": "98.0%" }
-            ];
-
-            const sampleInventory = [
-                { "品號": "SKU-101", "品名": "筆記型電腦 Pro", "類別": "硬體設備", "庫存量": 45, "安全庫存": 20, "單位成本": 22000 },
-                { "品號": "SKU-102", "品名": "智慧型手機 X", "類別": "通訊設備", "庫存量": 120, "安全庫存": 50, "單位成本": 13500 },
-                { "品號": "SKU-103", "品名": "平板電腦 Air", "類別": "硬體設備", "庫存量": 80, "安全庫存": 30, "單位成本": 8800 },
-                { "品號": "SKU-104", "品名": "無線降噪耳機", "類別": "週邊配件", "庫存量": 210, "安全庫存": 80, "單位成本": 2100 },
-                { "品號": "SKU-105", "品名": "RGB 機械鍵盤", "類別": "週邊配件", "庫存量": 150, "安全庫存": 60, "單位成本": 1400 }
-            ];
-
-            workbookData = {
-                "銷售明細表": sampleSales,
-                "區域目標達成率": sampleTargets,
-                "產品庫存清單": sampleInventory
-            };
-
-            document.getElementById('file-name-display').innerText = "預設範例_企業營運數據表.xlsx";
+            document.getElementById('file-name-display').innerText = "示範離線數據範例";
             document.getElementById('file-type-badge').innerText = "DEMO";
-            document.getElementById('file-size-display').innerText = "(預設範例)";
-
-            initWorkbookView();
-            showToast("成功載入預設範例資料！", "success");
-        }
-
-        // Setup Drag and Drop events
-        function setupDragAndDrop() {
-            const dropZone = document.getElementById('drop-zone');
-
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, preventDefaults, false);
-            });
-
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-
-            ['dragenter', 'dragover'].forEach(eventName => {
-                dropZone.addEventListener(eventName, () => dropZone.classList.add('border-emerald-500', 'bg-emerald-50/20'), false);
-            });
-
-            ['dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, () => dropZone.classList.remove('border-emerald-500', 'bg-emerald-50/20'), false);
-            });
-
-            dropZone.addEventListener('drop', (e) => {
-                const dt = e.dataTransfer;
-                const files = dt.files;
-                if (files.length > 0) {
-                    processFile(files[0]);
-                }
-            });
-        }
-
-        function handleFileSelect(event) {
-            const files = event.target.files;
-            if (files.length > 0) {
-                processFile(files[0]);
-            }
-        }
-
-        // Process Uploaded File using SheetJS
-        function processFile(file) {
-            const reader = new FileReader();
-            const ext = file.name.split('.').pop().toLowerCase();
-
-            document.getElementById('file-name-display').innerText = file.name;
-            document.getElementById('file-type-badge').innerText = ext.toUpperCase();
-            document.getElementById('file-size-display').innerText = `(${ (file.size / 1024).toFixed(1) } KB)`;
-
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    
-                    workbookData = {};
-                    workbook.SheetNames.forEach(sheetName => {
-                        const worksheet = workbook.Sheets[sheetName];
-                        // Convert sheet to JSON array
-                        const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                        if (json.length > 0) {
-                            workbookData[sheetName] = json;
-                        }
-                    });
-
-                    if (Object.keys(workbookData).length === 0) {
-                        showToast("此檔案沒有包含可讀取的資料內容", "error");
-                        return;
-                    }
-
-                    initWorkbookView();
-                    showToast(`成功解析檔案，包含 ${Object.keys(workbookData).length} 個工作表`, "success");
-
-                } catch (err) {
-                    console.error(err);
-                    showToast("檔案讀取失敗，請確認是否為有效的 Excel 或 CSV 檔案", "error");
-                }
-            };
-
-            reader.readAsArrayBuffer(file);
-        }
-
-        // Initialize Workspace Views after loading data
-        function initWorkbookView() {
-            const sheetNames = Object.keys(workbookData);
-            if (sheetNames.length === 0) return;
-
-            // Render Sheet Tabs
-            const tabsContainer = document.getElementById('sheet-tabs');
-            tabsContainer.innerHTML = '';
-
-            sheetNames.forEach((sheetName, idx) => {
-                const btn = document.createElement('button');
-                btn.className = `px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-                    idx === 0 
-                    ? 'bg-emerald-600 text-white shadow-sm' 
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`;
-                btn.innerText = sheetName;
-                btn.onclick = () => switchSheet(sheetName, btn);
-                tabsContainer.appendChild(btn);
-            });
-
-            // Set first sheet active
-            currentSheetName = sheetNames[0];
-            rawCurrentSheetRows = workbookData[currentSheetName] || [];
-            
-            // Reset filters & page
-            currentPage = 1;
-            searchQuery = '';
-            document.getElementById('global-search').value = '';
-            document.getElementById('clear-search-btn').classList.add('hidden');
-            sortColumn = null;
-
-            applyFiltersAndRender();
-            populateChartDropdowns();
-            renderColumnStats();
-        }
-
-        // Switch Active Sheet Tab
-        function switchSheet(sheetName, activeBtn) {
-            currentSheetName = sheetName;
-            rawCurrentSheetRows = workbookData[currentSheetName] || [];
-
-            // Update Tab styles
-            const tabs = document.getElementById('sheet-tabs').children;
-            for (let btn of tabs) {
-                btn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap bg-slate-100 text-slate-600 hover:bg-slate-200';
-            }
-            activeBtn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap bg-emerald-600 text-white shadow-sm';
-
-            currentPage = 1;
-            sortColumn = null;
             applyFiltersAndRender();
             populateChartDropdowns();
             renderColumnStats();
@@ -514,7 +621,7 @@
             if (!rawCurrentSheetRows || rawCurrentSheetRows.length === 0) {
                 filteredRows = [];
             } else {
-                // 1. Search Filter
+                // Search Filter
                 if (searchQuery.trim() !== '') {
                     const q = searchQuery.toLowerCase();
                     filteredRows = rawCurrentSheetRows.filter(row => {
@@ -526,13 +633,12 @@
                     filteredRows = [...rawCurrentSheetRows];
                 }
 
-                // 2. Sorting
+                // Sorting
                 if (sortColumn) {
                     filteredRows.sort((a, b) => {
                         let valA = a[sortColumn] ?? '';
                         let valB = b[sortColumn] ?? '';
 
-                        // Number comparison
                         if (!isNaN(valA) && !isNaN(valB) && valA !== '' && valB !== '') {
                             valA = Number(valA);
                             valB = Number(valB);
@@ -550,7 +656,7 @@
             updateChart();
         }
 
-        // Search Input Event
+        // Search Input Handlers
         function onSearchChange() {
             searchQuery = document.getElementById('global-search').value;
             const clearBtn = document.getElementById('clear-search-btn');
@@ -595,7 +701,7 @@
             applyFiltersAndRender();
         }
 
-        // Render Table Headers and Paginated Body
+        // Render Data Table
         function renderTable() {
             const thead = document.getElementById('table-head');
             const tbody = document.getElementById('table-body');
@@ -615,10 +721,9 @@
                 return;
             }
 
-            // Extract Headers from first row of raw data
             const headers = Object.keys(rawCurrentSheetRows[0] || {});
 
-            // 1. Render Table Head
+            // Head
             const trHead = document.createElement('tr');
             headers.forEach(header => {
                 const th = document.createElement('th');
@@ -640,7 +745,7 @@
             });
             thead.appendChild(trHead);
 
-            // 2. Render Paginated Table Body
+            // Body
             const startIndex = (currentPage - 1) * pageSize;
             const endIndex = Math.min(startIndex + pageSize, filteredRows.length);
             const pageData = filteredRows.slice(startIndex, endIndex);
@@ -654,7 +759,6 @@
                     td.className = 'px-4 py-2.5 whitespace-nowrap text-slate-700';
                     const val = row[header];
 
-                    // Formatter logic
                     if (val === null || val === undefined || val === '') {
                         td.innerHTML = `<span class="text-slate-300 italic text-xs">空值</span>`;
                     } else if (typeof val === 'number') {
@@ -671,7 +775,7 @@
             renderPaginationControls(filteredRows.length);
         }
 
-        // Render Pagination Control Buttons
+        // Render Pagination Controls
         function renderPaginationControls(totalItems) {
             const totalPages = Math.ceil(totalItems / pageSize) || 1;
             const infoElem = document.getElementById('pagination-info');
@@ -681,48 +785,37 @@
             const end = Math.min(currentPage * pageSize, totalItems);
 
             infoElem.innerText = `顯示第 ${start} 至 ${end} 筆，共 ${totalItems} 筆資料`;
-
             controlsElem.innerHTML = '';
 
-            // Prev Button
+            // Prev
             const prevBtn = document.createElement('button');
             prevBtn.className = `px-2.5 py-1 rounded-md border text-xs font-medium transition-colors ${
-                currentPage === 1 
-                ? 'text-slate-300 border-slate-200 cursor-not-allowed' 
-                : 'text-slate-600 border-slate-300 hover:bg-slate-100'
+                currentPage === 1 ? 'text-slate-300 border-slate-200 cursor-not-allowed' : 'text-slate-600 border-slate-300 hover:bg-slate-100'
             }`;
             prevBtn.innerHTML = `<i class="fa-solid fa-chevron-left"></i>`;
             prevBtn.disabled = currentPage === 1;
             prevBtn.onclick = () => goToPage(currentPage - 1);
             controlsElem.appendChild(prevBtn);
 
-            // Page Number Buttons
-            const maxVisiblePages = 5;
-            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-            if (endPage - startPage + 1 < maxVisiblePages) {
-                startPage = Math.max(1, endPage - maxVisiblePages + 1);
-            }
+            // Pages
+            const maxPages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxPages / 2));
+            let endPage = Math.min(totalPages, startPage + maxPages - 1);
 
             for (let p = startPage; p <= endPage; p++) {
                 const btn = document.createElement('button');
                 btn.className = `px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
-                    p === currentPage 
-                    ? 'bg-emerald-600 text-white shadow-xs' 
-                    : 'text-slate-600 border border-slate-300 hover:bg-slate-100'
+                    p === currentPage ? 'bg-emerald-600 text-white' : 'text-slate-600 border border-slate-300 hover:bg-slate-100'
                 }`;
                 btn.innerText = p;
                 btn.onclick = () => goToPage(p);
                 controlsElem.appendChild(btn);
             }
 
-            // Next Button
+            // Next
             const nextBtn = document.createElement('button');
             nextBtn.className = `px-2.5 py-1 rounded-md border text-xs font-medium transition-colors ${
-                currentPage === totalPages || totalPages === 0
-                ? 'text-slate-300 border-slate-200 cursor-not-allowed' 
-                : 'text-slate-600 border-slate-300 hover:bg-slate-100'
+                currentPage === totalPages || totalPages === 0 ? 'text-slate-300 border-slate-200 cursor-not-allowed' : 'text-slate-600 border-slate-300 hover:bg-slate-100'
             }`;
             nextBtn.innerHTML = `<i class="fa-solid fa-chevron-right"></i>`;
             nextBtn.disabled = currentPage === totalPages || totalPages === 0;
@@ -730,7 +823,7 @@
             controlsElem.appendChild(nextBtn);
         }
 
-        // Update Top KPI Stats
+        // Update Top KPI Cards
         function updateKPICards() {
             const totalRows = rawCurrentSheetRows.length;
             const headers = Object.keys(rawCurrentSheetRows[0] || {});
@@ -760,19 +853,19 @@
             const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
 
             document.getElementById('kpi-total-rows').innerText = totalRows.toLocaleString();
-            document.getElementById('kpi-filtered-rows').innerText = `篩選過濾後: ${filteredRows.length.toLocaleString()} 筆`;
+            document.getElementById('kpi-filtered-rows').innerText = `目前顯示: ${filteredRows.length.toLocaleString()} 筆`;
 
             document.getElementById('kpi-total-cols').innerText = headers.length;
             document.getElementById('kpi-numeric-cols').innerText = `數值型態欄位: ${numericCols} 個`;
 
             document.getElementById('kpi-null-ratio').innerText = `${nullRatio}%`;
-            document.getElementById('kpi-null-count').innerText = `缺失值單元格: ${nullCells.toLocaleString()} 個`;
+            document.getElementById('kpi-null-count').innerText = `缺失單元格: ${nullCells.toLocaleString()} 個`;
 
             document.getElementById('kpi-current-page').innerText = `${currentPage} / ${totalPages}`;
             document.getElementById('kpi-rows-per-page').innerText = `每頁顯示 ${pageSize} 筆`;
         }
 
-        // Populate Chart Dropdowns (X-axis, Y-axis)
+        // Populate Chart Dropdowns
         function populateChartDropdowns() {
             const xAxisSelect = document.getElementById('chart-x-axis');
             const yAxisSelect = document.getElementById('chart-y-axis');
@@ -784,7 +877,7 @@
 
             const headers = Object.keys(rawCurrentSheetRows[0]);
 
-            headers.forEach((h, idx) => {
+            headers.forEach((h) => {
                 const optX = document.createElement('option');
                 optX.value = h;
                 optX.innerText = h;
@@ -796,7 +889,6 @@
                 yAxisSelect.appendChild(optY);
             });
 
-            // Smart Auto-select for Chart: Select first non-numeric for X, first numeric for Y
             if (headers.length > 1) {
                 let numCol = headers.find(h => typeof rawCurrentSheetRows[0][h] === 'number') || headers[1];
                 let catCol = headers.find(h => typeof rawCurrentSheetRows[0][h] !== 'number') || headers[0];
@@ -806,7 +898,7 @@
             }
         }
 
-        // Render Chart using Chart.js
+        // Render Chart.js
         function updateChart() {
             const xAxisCol = document.getElementById('chart-x-axis').value;
             const yAxisCol = document.getElementById('chart-y-axis').value;
@@ -819,20 +911,18 @@
                 return;
             }
 
-            // Aggregate Data
             const grouped = {};
             filteredRows.forEach(row => {
-                const xVal = String(row[xAxisCol] ?? 'Unspecified');
+                const xVal = String(row[xAxisCol] ?? '未填寫');
                 const rawY = row[yAxisCol];
                 const yVal = parseFloat(rawY) || 0;
 
                 if (!grouped[xVal]) {
-                    grouped[xVal] = { sum: 0, count: 0, values: [] };
+                    grouped[xVal] = { sum: 0, count: 0 };
                 }
 
                 grouped[xVal].sum += yVal;
                 grouped[xVal].count += 1;
-                grouped[xVal].values.push(yVal);
             });
 
             let labels = Object.keys(grouped);
@@ -844,7 +934,6 @@
                 return g.sum;
             });
 
-            // Limit top N
             if (limitVal !== 'all') {
                 const limit = parseInt(limitVal);
                 labels = labels.slice(0, limit);
@@ -853,17 +942,14 @@
 
             document.getElementById('chart-title-text').innerText = `${xAxisCol} vs ${yAxisCol} (${aggMethod.toUpperCase()})`;
 
-            // Chart Colors
             const bgColors = [
-                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
+                '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', 
                 '#ec4899', '#06b6d4', '#84cc16', '#6366f1', '#14b8a6'
             ];
 
             const ctx = document.getElementById('analytics-chart').getContext('2d');
 
-            if (chartInstance) {
-                chartInstance.destroy();
-            }
+            if (chartInstance) chartInstance.destroy();
 
             chartInstance = new Chart(ctx, {
                 type: chartType,
@@ -872,8 +958,8 @@
                     datasets: [{
                         label: `${yAxisCol} (${aggMethod})`,
                         data: dataPoints,
-                        backgroundColor: chartType === 'line' ? 'rgba(59, 130, 246, 0.15)' : bgColors,
-                        borderColor: chartType === 'line' ? '#2563eb' : '#ffffff',
+                        backgroundColor: chartType === 'line' ? 'rgba(16, 185, 129, 0.15)' : bgColors,
+                        borderColor: chartType === 'line' ? '#10b981' : '#ffffff',
                         borderWidth: 2,
                         fill: chartType === 'line',
                         tension: 0.3
@@ -884,32 +970,19 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            display: ['pie', 'doughnut', 'polarArea'].includes(chartType),
+                            display: ['pie', 'doughnut'].includes(chartType),
                             position: 'bottom'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let val = context.raw;
-                                    return ` ${context.dataset.label}: ${val.toLocaleString()}`;
-                                }
-                            }
                         }
                     },
-                    scales: ['pie', 'doughnut', 'polarArea'].includes(chartType) ? {} : {
-                        y: {
-                            beginAtZero: true,
-                            grid: { color: '#f1f5f9' }
-                        },
-                        x: {
-                            grid: { display: false }
-                        }
+                    scales: ['pie', 'doughnut'].includes(chartType) ? {} : {
+                        y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+                        x: { grid: { display: false } }
                     }
                 }
             });
         }
 
-        // Render Detailed Column Statistics
+        // Render Column Stats Grid
         function renderColumnStats() {
             const container = document.getElementById('column-stats-grid');
             container.innerHTML = '';
@@ -925,7 +998,6 @@
                 let nonNullValues = values.filter(v => v !== null && v !== undefined && v !== '');
                 let nullCount = total - nonNullValues.length;
 
-                // Determine DataType & Numeric Calculations
                 let isNumeric = nonNullValues.length > 0 && nonNullValues.every(v => !isNaN(v));
                 let numSum = 0, numAvg = 0, numMin = null, numMax = null;
 
@@ -937,7 +1009,6 @@
                     numMax = Math.max(...numArr);
                 }
 
-                // Unique values
                 const uniqueCount = new Set(nonNullValues).size;
 
                 const card = document.createElement('div');
@@ -952,7 +1023,7 @@
                     </div>
                     <div class="text-xs space-y-1 text-slate-600">
                         <div class="flex justify-between"><span>相異值個數:</span> <span class="font-semibold text-slate-800">${uniqueCount}</span></div>
-                        <div class="flex justify-between"><span>空白缺值:</span> <span class="font-semibold text-slate-800">${nullCount} (${((nullCount/total)*100).toFixed(1)}%)</span></div>
+                        <div class="flex justify-between"><span>缺失空白數:</span> <span class="font-semibold text-slate-800">${nullCount}</span></div>
                         ${isNumeric ? `
                             <div class="flex justify-between"><span>總和 (Sum):</span> <span class="font-semibold text-slate-800">${numSum.toLocaleString()}</span></div>
                             <div class="flex justify-between"><span>平均值 (Avg):</span> <span class="font-semibold text-slate-800">${numAvg.toFixed(2)}</span></div>
@@ -965,51 +1036,86 @@
             });
         }
 
-        // View Switcher (Table / Chart / Stats)
+        // Backup Local Drag and Drop
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('drop-zone');
+            if (!dropZone) return;
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files.length > 0) processLocalFile(files[0]);
+            });
+        }
+
+        function handleFileSelect(e) {
+            if (e.target.files.length > 0) processLocalFile(e.target.files[0]);
+        }
+
+        function processLocalFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.SheetNames[0];
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
+
+                    rawCurrentSheetRows = json;
+                    document.getElementById('file-name-display').innerText = file.name;
+                    document.getElementById('file-type-badge').innerText = file.name.split('.').pop().toUpperCase();
+                    document.getElementById('last-update-display').innerText = `本地檔案載入時間: ${new Date().toLocaleTimeString()}`;
+
+                    updateSyncStatusBadge('success', '本地檔案');
+                    applyFiltersAndRender();
+                    populateChartDropdowns();
+                    renderColumnStats();
+                    showToast("成功讀取本地檔案！", "success");
+                } catch (err) {
+                    showToast("無法解析檔案格式", "error");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // View Switcher
         function switchView(viewName) {
             ['table', 'chart', 'stats'].forEach(v => {
                 document.getElementById(`view-section-${v}`).classList.add('hidden');
-                document.getElementById(`view-btn-${v}`).className = 'pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2 text-slate-500';
+                document.getElementById(`view-btn-${v}`).className = 'pb-3 border-b-2 border-transparent hover:text-slate-800 flex items-center gap-2 text-slate-500 whitespace-nowrap';
             });
 
             document.getElementById(`view-section-${viewName}`).classList.remove('hidden');
-            document.getElementById(`view-btn-${viewName}`).className = 'pb-3 border-b-2 border-emerald-600 text-emerald-600 font-semibold flex items-center gap-2';
+            document.getElementById(`view-btn-${viewName}`).className = 'pb-3 border-b-2 border-emerald-600 text-emerald-600 font-semibold flex items-center gap-2 whitespace-nowrap';
 
-            if (viewName === 'chart') {
-                updateChart();
-            }
+            if (viewName === 'chart') updateChart();
         }
 
-        // Export Filtered Data back to XLSX
+        // Export Filtered XLSX
         function exportFilteredData() {
             if (!filteredRows || filteredRows.length === 0) {
-                showToast("當前無可供匯出的資料", "error");
+                showToast("無可匯出資料", "error");
                 return;
             }
-
             const ws = XLSX.utils.json_to_sheet(filteredRows);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, currentSheetName || "FilteredData");
-
-            const fileName = `Export_${currentSheetName}_${new Date().toISOString().slice(0,10)}.xlsx`;
-            XLSX.writeFile(wb, fileName);
-            showToast(`已成功導出 ${fileName}`, "success");
+            XLSX.utils.book_append_sheet(wb, ws, "SheetSyncData");
+            XLSX.writeFile(wb, `SyncData_${new Date().toISOString().slice(0,10)}.xlsx`);
+            showToast("成功匯出 Excel 檔案", "success");
         }
 
-        // Toast Notification Helper
+        // Toast Messages
         function showToast(message, type = "info") {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            
             const bgClass = type === 'success' ? 'bg-emerald-700' : type === 'error' ? 'bg-rose-700' : 'bg-slate-800';
             const icon = type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info';
 
-            toast.className = `${bgClass} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 text-xs sm:text-sm animate-bounce transition-all duration-300`;
-            toast.innerHTML = `
-                <i class="fa-solid ${icon} text-base"></i>
-                <span class="flex-1">${message}</span>
-            `;
-
+            toast.className = `${bgClass} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 text-xs sm:text-sm transition-all duration-300`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-base"></i><span>${message}</span>`;
             container.appendChild(toast);
 
             setTimeout(() => {
@@ -1018,14 +1124,8 @@
             }, 3000);
         }
 
-        // Helper function to escape HTML string
         function escapeHtml(str) {
-            return String(str)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
     </script>
 </body>
